@@ -1,0 +1,70 @@
+import cvxpy as cp
+import matplotlib.pyplot as plt
+import numpy as np
+
+def find_minimal_area_ellipse(pts: np.ndarray, num_to_include: int) -> None:
+  assert pts.shape[1] == 2
+
+  off_offset = 1000
+
+  N = pts.shape[0]
+
+  off = cp.Variable(N, boolean=True)
+
+  u = cp.Variable()
+
+  x = cp.Variable()
+  z = cp.Variable()
+  y = cp.Variable()
+  # Offset of the ellipse
+  b = cp.Variable(2)
+
+  obj = cp.Minimize(-u)
+
+  constraints = [x >= cp.quad_over_lin(cp.hstack((z,u)), y)]
+
+  emat = cp.bmat([[x,z],[z,y]])
+
+  pts = pts.T
+
+  for i in range(N):
+    constraints.append(cp.norm(emat@pts[:,i] + b) <= 1 + off_offset*off[i])
+
+  constraints += [ cp.sum(off) <= N - num_to_include ]
+
+  prob = cp.Problem(obj, constraints)
+
+  optval = prob.solve(solver='XPRESS', verbose=True)
+
+  print(f"Optimum value: {optval}")
+
+  angles = np.linspace(0, 2*np.pi, 200)
+  rhs = np.row_stack((np.cos(angles) - b.value[0], np.sin(angles) - b.value[1]))
+  ellipse = np.linalg.solve([[x.value, z.value], [z.value, y.value]], rhs)
+
+  off_values = off.value.astype(bool)
+  pts_excluded = pts[:, off_values]
+  pts_included = pts[:, np.logical_not(off_values)]
+
+  plt.scatter(pts_excluded[0,:], pts_excluded[1,:])
+  plt.scatter(pts_included[0,:], pts_included[1,:])
+  plt.plot(ellipse[0,:].T, ellipse[1,:].T, c="red")
+  plt.xlabel('Dimension 1'); plt.ylabel('Dimension 2')
+  plt.title('Minimum Volume Ellipsoid')
+  plt.show()
+
+
+def sanity_check() -> None:
+  N = 10
+  Npack = 10
+  pts = np.random.normal(loc=0, scale=1, size=(N,2))
+  pts[0:Npack,:] = np.random.normal(loc=0, scale=0.01, size=(Npack,2))
+  find_minimal_area_ellipse(pts, 10)
+
+
+def display_capability(N, num_include: int) -> None:
+  pts = np.random.random((N,2))
+  find_minimal_area_ellipse(pts, num_include)
+
+np.random.seed(10)
+display_capability(10, 10)
